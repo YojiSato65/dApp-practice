@@ -19,6 +19,7 @@ export default function HomePage() {
         })
     } else {
       setErrorMessage('Install MetaMask')
+      console.log(errorMessage)
     }
   }
 
@@ -46,31 +47,32 @@ export default function HomePage() {
 
   window.ethereum.on('chainChanged', chainChangedHandler)
 
-  const transactionHandler = async (ether, address) => {
+  const transactionHandler = async (ether, sender, recipient) => {
     try {
       const result = await window.ethereum.request({
         method: 'eth_requestAccounts',
       })
       const provider = new ethers.providers.Web3Provider(window.ethereum)
       const signer = provider.getSigner()
-      ethers.utils.getAddress(address)
+      ethers.utils.getAddress(sender)
       const transaction = await signer.sendTransaction({
-        to: address,
+        to: recipient,
         value: ethers.utils.parseEther(ether),
       })
       console.log('result', result)
-      console.log(ether, address)
+      console.log(ether, sender, recipient)
       console.log('tx', transaction)
-      accountChangedHandler(result)
+      getUserBalance(sender.toString())
       console.log('userBalance', userBalance)
     } catch (error) {
       setErrorMessage(error.message)
+      console.log(errorMessage)
     }
   }
 
   const handleSubmit = async (e) => {
     e.preventDefault()
-    await transactionHandler(ether, address)
+    await transactionHandler(ether, sender, recipient)
   }
 
   return (
@@ -99,11 +101,27 @@ export default function HomePage() {
             <Form.Group className="mb-3" style={{ width: '50vw' }}>
               <Form.Control
                 type="text"
-                placeholder="Address"
+                placeholder="Address1"
                 value={address}
                 onChange={(e) => setAddress(e.target.value)}
               />
             </Form.Group>
+            {/* <Form.Group className="mb-3" style={{ width: '50vw' }}>
+              <Form.Control
+                type="text"
+                placeholder="Address2"
+                value={address}
+                onChange={(e) => setAddress(e.target.value)}
+              />
+            </Form.Group>
+            <Form.Group className="mb-3" style={{ width: '50vw' }}>
+              <Form.Control
+                type="text"
+                placeholder="Address3"
+                value={address}
+                onChange={(e) => setAddress(e.target.value)}
+              />
+            </Form.Group> */}
             <Button variant="primary" type="submit">
               Submit
             </Button>
@@ -112,8 +130,6 @@ export default function HomePage() {
       ) : (
         <Button onClick={connectWalletHandler}>Connect Wallet</Button>
       )}
-
-      {errorMessage}
     </div>
   )
 }
