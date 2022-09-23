@@ -4,28 +4,24 @@ import styles from './HomePage.module.css'
 import { ethers } from 'ethers'
 
 export default function HomePage() {
-  const [errorMessage, setErrorMessage] = useState(null)
   const [defaultAccount, setDefaultAccount] = useState(null)
   const [userBalance, setUserBalance] = useState(null)
-  const [address1, setAddress1] = useState('')
-  const [address2, setAddress2] = useState('')
-  const [address3, setAddress3] = useState('')
+  const [addressesInput, setAddressesInput] = useState('')
   const [ether, setEther] = useState(0)
+  const [balanceRefresh, setBalanceRefresh] = useState(0)
 
-  // useEffect(() => {
-  //   getUserBalance(defaultAccount)
-  // }, [userBalance])
+  useEffect(() => {
+    getUserBalance(defaultAccount)
+  }, [balanceRefresh])
 
-  const connectWalletHandler = () => {
+  const connectWalletHandler = async () => {
     if (window.ethereum) {
-      window.ethereum
-        .request({ method: 'eth_requestAccounts' })
-        .then((result) => {
-          accountChangedHandler(result[0])
-        })
+      const result = await window.ethereum.request({
+        method: 'eth_requestAccounts',
+      })
+      accountChangedHandler(result[0])
     } else {
-      setErrorMessage('Install MetaMask')
-      console.log(errorMessage)
+      console.log('install metamask')
     }
   }
 
@@ -36,15 +32,12 @@ export default function HomePage() {
     console.log('balance', userBalance)
   }
 
-  const getUserBalance = (address) => {
-    window.ethereum
-      .request({
-        method: 'eth_getBalance',
-        params: [address, 'latest'],
-      })
-      .then((balance) => {
-        setUserBalance(ethers.utils.formatEther(balance))
-      })
+  const getUserBalance = async (address) => {
+    const balance = await window.ethereum.request({
+      method: 'eth_getBalance',
+      params: [address, 'latest'],
+    })
+    setUserBalance(ethers.utils.formatEther(balance))
   }
 
   const chainChangedHandler = () => {
@@ -53,44 +46,58 @@ export default function HomePage() {
   window.ethereum.on('accountsChanged', accountChangedHandler)
   window.ethereum.on('chainChanged', chainChangedHandler)
 
-  const transactionHandler = async (ether, address1, address2) => {
-    const params = {
-      to: address1,
-      value: ethers.utils.parseEther(ether),
-    }
-    try {
-      const provider = new ethers.providers.Web3Provider(window.ethereum)
-      const signer = provider.getSigner()
-      await signer.sendTransaction({
-        to: address1,
-        value: ethers.utils.parseEther(ether),
-      })
-      if (address2) {
+  // addresses
+  // account1: 0xa3123e1D8A7EA78608776cF8b083E68b58FbF4d3
+  // account2: 0xd236bBcca49eeA2eBAbf1eD6622c4fBD1E652240
+  // account3: 0xF92aAB15Cf45d6b161aC74Ac001a6D30e98C3236
+  const transactionHandler = async (ether, addressesInput) => {
+    const addresses = addressesInput.split(/\r?\n/)
+    console.log('addresses', addresses)
+    const provider = new ethers.providers.Web3Provider(window.ethereum)
+    const signer = provider.getSigner()
+    const responses = await Promise.all(
+      // for (const address of addresses) {
+      addresses.map(async (address) => {
         await signer.sendTransaction({
-          to: address2,
+          to: address,
           value: ethers.utils.parseEther(ether),
         })
-      }
-      if (address3) {
-        await signer.sendTransaction({
-          to: address3,
-          value: ethers.utils.parseEther(ether),
-        })
-      }
-      console.log('ether', ether)
-      console.log('address', address1)
-      console.log('balance', userBalance)
-      getUserBalance(defaultAccount)
-    } catch (error) {
-      setErrorMessage(error)
-      console.log(error)
-    }
+      }),
+    ).then((result) => {
+      console.log('result', result)
+      result.wait()
+    })
+    console.log('responses', responses)
   }
+
+  // const transactionHandler = async (ether, address) => {
+  //   const params = {
+  //     to: address,
+  //     value: ethers.utils.parseEther(ether),
+  //   }
+  //   try {
+  //     const provider = new ethers.providers.Web3Provider(window.ethereum)
+  //     const signer = provider.getSigner()
+  //     const tx = await signer.sendTransaction({
+  //       to: address,
+  //       value: ethers.utils.parseEther(ether),
+  //     })
+  //     // this will wait until the transaction is mined
+  //     await tx.wait()
+  //     console.log('balance', userBalance)
+  //     console.log('tx', tx)
+  //     refreshDataGrid()
+  //   } catch (error) {
+  //     console.log(error)
+  //   }
+  // }
 
   const handleSubmit = async (e) => {
     e.preventDefault()
-    await transactionHandler(ether, address1, address2, address3)
+    await transactionHandler(ether, addressesInput)
   }
+
+  const refreshDataGrid = () => setBalanceRefresh((b) => ++b)
 
   return (
     <div className={styles.container}>
@@ -115,28 +122,14 @@ export default function HomePage() {
                 onChange={(e) => setEther(e.target.value)}
               />
             </Form.Group>
+
             <Form.Group className="mb-3" style={{ width: '50vw' }}>
               <Form.Control
-                type="text"
-                placeholder="Address1"
-                value={address1}
-                onChange={(e) => setAddress1(e.target.value)}
-              />
-            </Form.Group>
-            <Form.Group className="mb-3" style={{ width: '50vw' }}>
-              <Form.Control
-                type="text"
-                placeholder="Address2"
-                value={address2}
-                onChange={(e) => setAddress2(e.target.value)}
-              />
-            </Form.Group>
-            <Form.Group className="mb-3" style={{ width: '50vw' }}>
-              <Form.Control
-                type="text"
-                placeholder="Address3"
-                value={address3}
-                onChange={(e) => setAddress3(e.target.value)}
+                as="textarea"
+                rows={5}
+                placeholder="Enter the addresses devided by new lines"
+                value={addressesInput}
+                onChange={(e) => setAddressesInput(e.target.value)}
               />
             </Form.Group>
             <Button variant="primary" type="submit">
