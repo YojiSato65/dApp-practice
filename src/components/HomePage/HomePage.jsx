@@ -11,6 +11,7 @@ export default function HomePage() {
   const [balanceRefresh, setBalanceRefresh] = useState(0)
 
   useEffect(() => {
+    console.log('update the balance')
     getUserBalance(defaultAccount)
   }, [balanceRefresh])
 
@@ -28,8 +29,8 @@ export default function HomePage() {
   const accountChangedHandler = (newAccount) => {
     setDefaultAccount(newAccount)
     getUserBalance(newAccount.toString())
-    console.log('defo', defaultAccount)
-    console.log('balance', userBalance)
+    // console.log('defo', defaultAccount)
+    // console.log('balance', userBalance)
   }
 
   const getUserBalance = async (address) => {
@@ -55,42 +56,32 @@ export default function HomePage() {
     console.log('addresses', addresses)
     const provider = new ethers.providers.Web3Provider(window.ethereum)
     const signer = provider.getSigner()
-    const responses = await Promise.all(
-      // for (const address of addresses) {
-      addresses.map(async (address) => {
-        await signer.sendTransaction({
-          to: address,
-          value: ethers.utils.parseEther(ether),
-        })
-      }),
-    ).then((result) => {
-      console.log('result', result)
-      result.wait()
-    })
-    console.log('responses', responses)
-  }
+    const txs = []
+    for (const address of addresses) {
+      const tx = signer.sendTransaction({
+        to: address,
+        value: ethers.utils.parseEther(ether).div(addresses.length),
+      })
+      txs.push(tx)
+    }
+    console.log('txs:', txs)
 
-  // const transactionHandler = async (ether, address) => {
-  //   const params = {
-  //     to: address,
-  //     value: ethers.utils.parseEther(ether),
-  //   }
-  //   try {
-  //     const provider = new ethers.providers.Web3Provider(window.ethereum)
-  //     const signer = provider.getSigner()
-  //     const tx = await signer.sendTransaction({
-  //       to: address,
-  //       value: ethers.utils.parseEther(ether),
-  //     })
-  //     // this will wait until the transaction is mined
-  //     await tx.wait()
-  //     console.log('balance', userBalance)
-  //     console.log('tx', tx)
-  //     refreshDataGrid()
-  //   } catch (error) {
-  //     console.log(error)
-  //   }
-  // }
+    const response = await Promise.allSettled(txs)
+      .then(async (results) => {
+        console.log('results', results)
+        for (let i = 0; i < results.length; i++) {
+          if (results[i].status === 'fulfilled') {
+            await results[i].value.wait()
+          } else {
+            console.log(`promise${i + 1} rejected`)
+          }
+        }
+      })
+      .catch((e) => {
+        console.log(e)
+      })
+    refreshDataGrid()
+  }
 
   const handleSubmit = async (e) => {
     e.preventDefault()
