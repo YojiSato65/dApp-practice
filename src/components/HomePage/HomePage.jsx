@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { Form, Button } from 'react-bootstrap'
+import { Form, Button, Modal } from 'react-bootstrap'
 import styles from './HomePage.module.css'
 import { ethers } from 'ethers'
 
@@ -9,6 +9,11 @@ export default function HomePage() {
   const [addressesInput, setAddressesInput] = useState('')
   const [ether, setEther] = useState(0)
   const [balanceRefresh, setBalanceRefresh] = useState(0)
+  const [addresses, setAddresses] = useState([])
+  const [show, setShow] = useState(false)
+  const [statuses, setStatuses] = useState([])
+  const handleClose = () => setShow(false)
+  const handleShow = () => setShow(true)
 
   useEffect(() => {
     console.log('update the balance')
@@ -29,8 +34,6 @@ export default function HomePage() {
   const accountChangedHandler = (newAccount) => {
     setDefaultAccount(newAccount)
     getUserBalance(newAccount.toString())
-    // console.log('defo', defaultAccount)
-    // console.log('balance', userBalance)
   }
 
   const getUserBalance = async (address) => {
@@ -51,40 +54,93 @@ export default function HomePage() {
   // account1: 0xa3123e1D8A7EA78608776cF8b083E68b58FbF4d3
   // account2: 0xd236bBcca49eeA2eBAbf1eD6622c4fBD1E652240
   // account3: 0xF92aAB15Cf45d6b161aC74Ac001a6D30e98C3236
-  const transactionHandler = async (ether, addressesInput) => {
-    const addresses = addressesInput.split(/\r?\n/)
-    console.log('addresses', addresses)
-    const provider = new ethers.providers.Web3Provider(window.ethereum)
-    const signer = provider.getSigner()
-    const txs = []
-    for (const address of addresses) {
-      const tx = signer.sendTransaction({
-        to: address,
-        value: ethers.utils.parseEther(ether).div(addresses.length),
-      })
-      txs.push(tx)
-    }
-    console.log('txs:', txs)
 
-    const response = await Promise.allSettled(txs)
-      .then(async (results) => {
-        console.log('results', results)
-        for (let i = 0; i < results.length; i++) {
-          if (results[i].status === 'fulfilled') {
-            await results[i].value.wait()
-          } else {
-            console.log(`promise${i + 1} rejected`)
-          }
+  const transactionHandler = async (ether, addressesInput) => {
+    try {
+      const addresses = addressesInput.split(/\r?\n/)
+      setAddresses(addresses)
+      console.log('addresses', addresses)
+      setStatuses(addresses.map((address) => 'waiting'))
+      console.log('statuses', statuses)
+      const provider = new ethers.providers.Web3Provider(window.ethereum)
+      const signer = provider.getSigner()
+      const txs = []
+
+      const eachTx = async (address, i) => {
+        try {
+          const tx = await signer.sendTransaction({
+            to: address,
+            value: ethers.utils.parseEther(ether).div(addresses.length),
+          })
+          setStatuses((statuses) =>
+            statuses.map((status, index) => (i === index ? 'sent' : status)),
+          )
+          await tx.wait()
+          setStatuses((statuses) =>
+            statuses.map((status, index) => (i === index ? 'mined' : status)),
+          )
+        } catch (error) {
+          console.log(error)
+          setStatuses((statuses) =>
+            statuses.map((status, index) =>
+              i === index ? 'rejected' : status,
+            ),
+          )
         }
-      })
-      .catch((e) => {
-        console.log(e)
-      })
-    refreshDataGrid()
+      }
+      for (let i = 0; i < addresses.length; i++) {
+        txs.push(eachTx(addresses[i], i))
+      }
+      await Promise.all(txs)
+      handleClose()
+      refreshDataGrid()
+    } catch (error) {
+      console.error(error)
+    }
   }
+
+  // const addresses = addressesInput.split(/\r?\n/)
+  // setAddresses(addresses)
+  // tx1 = {address:'', status:''}
+  // setTx([tx1, tx2, ...])
+  // const provider = new ethers.providers.Web3Provider(window.ethereum)
+  // const signer = provider.getSigner()
+  // const txs = []
+  // for (const address of addresses) {
+  //   const tx = signer
+  //     .sendTransaction({
+  //       to: address,
+  //       value: ethers.utils.parseEther(ether).div(addresses.length),
+  //     })
+  // .then(async (result) => {
+  //   setIsPendingByUser(false)
+  //   setIsPendingByMiner(true)
+  //   await result.wait()
+  //   console.log('result', result)
+  //   console.log('result wait', await result.wait())
+  // })
+  //     .then(() => {
+  //       setIsPendingByMiner(false)
+  //       setIsTxComplete(true)
+  //     })
+  //     .catch((e) => {
+  //       console.log(e)
+  //       if (e.code === 'ACTION_REJECTED') {
+  //         setIsPendingByMiner(false)
+  //         setIsTxRejected(true)
+  //       }
+  //     })
+  //   txs.push(tx)
+  // }
+  // await Promise.allSettled(txs).then(() => {
+  //   handleClose()
+  //   console.log('txs', txs)
+  //   refreshDataGrid()
+  // })
 
   const handleSubmit = async (e) => {
     e.preventDefault()
+    handleShow()
     await transactionHandler(ether, addressesInput)
   }
 
@@ -93,7 +149,7 @@ export default function HomePage() {
   return (
     <div className={styles.container}>
       {defaultAccount ? (
-        <div>
+        <>
           <h3>Address: {defaultAccount}</h3>
           <h3>Balance: {userBalance}</h3>
           <Form
@@ -124,13 +180,44 @@ export default function HomePage() {
               />
             </Form.Group>
             <Button variant="primary" type="submit">
-              Submit
+              Send Transaction
             </Button>
           </Form>
-        </div>
+        </>
       ) : (
         <Button onClick={connectWalletHandler}>Connect Wallet</Button>
       )}
+
+      <Modal show={show} onHide={handleClose} size="xl">
+        <Modal.Header closeButton>
+          <Modal.Title>Complete transaction</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          {addresses.map((address, i) => (
+            <div
+              style={{ display: 'flex', justifyContent: 'space-between' }}
+              key={i}
+            >
+              <p>{`To: ${address}`}</p>
+              <p>{(ether / addresses.length).toFixed(3)} ETH</p>
+              <p>{statuses[i]}</p>
+            </div>
+          ))}
+        </Modal.Body>
+        <Modal.Footer
+          style={{ alignItems: 'flex-start', flexDirection: 'column' }}
+        >
+          <h5>You'll be asked to confirm this transaction from your wallet.</h5>
+          {/* <Button variant="secondary" size="lg" disabled>
+            Waiting for approval...
+          </Button> */}
+        </Modal.Footer>
+        {/* <Modal.Footer>
+          <Button variant="secondary" onClick={handleClose}>
+            Close
+          </Button>
+        </Modal.Footer> */}
+      </Modal>
     </div>
   )
 }
